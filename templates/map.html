@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Rutas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+    <script>
+        function loadGoogleMapsAPI() {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+        let map;
+
+function initMap() {
+    map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: -12.0464, lng: -77.0428 },
+        zoom: 12
+    });
+
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({ suppressMarkers: false });
+    directionsRenderer.setMap(map);
+
+    infoWindow = new google.maps.InfoWindow(); // Para asegurar una sola ventana abierta
+    cargarUbicaciones();
+    mostrarRutasEnMapa();
+}
+
+window.onload = initMap;
+
+let infoWindowActual = null;
+
+fetch("{{ url_for('routes.listar_ubicaciones') }}")
+    .then(response => response.json())
+    .then(ubicaciones => {
+        if (ubicaciones.length === 0) {
+            console.error("No hay ubicaciones guardadas para este usuario.");
+            return;
+        }
+
+        let infoWindowActual = null; // Para cerrar la ventana anterior
+
+        ubicaciones.forEach(ubicacion => {
+            if (!ubicacion.latitud || !ubicacion.longitud) {
+                console.warn("Ubicación sin coordenadas:", ubicacion);
+                return;
+            }
+
+            let color = (ubicacion.tipo_ubicacion && ubicacion.tipo_ubicacion.toLowerCase() === "coordinada") 
+                ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
+                : "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+
+            let marker = new google.maps.Marker({
+                position: { lat: parseFloat(ubicacion.latitud), lng: parseFloat(ubicacion.longitud) },
+                map: map,
+                title: ubicacion.nombre || "Ubicación sin nombre",
+                icon: color
+            });
+
+            let contenido = `
+                <b>SOT:</b> ${ubicacion.codsolot && ubicacion.codsolot !== "No disponible" ? ubicacion.codsolot : "No disponible"}<br>
+                <b>CodCliente:</b> ${ubicacion.codcli && ubicacion.codcli !== "No disponible" ? ubicacion.codcli : "No disponible"}<br>
+                <b>Hora:</b> ${ubicacion.hora && ubicacion.hora !== "No disponible" ? ubicacion.hora : "No disponible"}<br>
+                <b>Nombre Cliente:</b> ${ubicacion.nomcli && ubicacion.nomcli !== "No disponible" ? ubicacion.nomcli : "No disponible"}<br>
+                <b>Dirección:</b> ${ubicacion.direccion && ubicacion.direccion !== "No disponible" ? ubicacion.direccion : "No disponible"}<br>
+                <b>Teléfono:</b> ${ubicacion.telefono && ubicacion.telefono !== "No disponible" ? ubicacion.telefono : "No disponible"}<br>
+                <b>Tipo Visita:</b> ${ubicacion.tipo_ubicacion && ubicacion.tipo_ubicacion !== "No disponible" ? ubicacion.tipo_ubicacion : "No disponible"}<br>
+                <b>Referencia:</b> ${ubicacion.referencia && ubicacion.referencia !== "No disponible" ? ubicacion.referencia : "No disponible"}<br>
+    
+                <button onclick="marcarComoAtendido(${ubicacion.id}, 'efectiva')">Atendido Efectivo</button>
+                <button onclick="marcarComoAtendido(${ubicacion.id}, 'no efectiva')">Atendido No Efectivo</button>
+            `;
+
+            let infoWindow = new google.maps.InfoWindow({
+                content: contenido
+            });
+            
+
+            marker.addListener("click", function () {
+                if (infoWindowActual) {
+                    infoWindowActual.close(); // Cierra cualquier otra ventana antes de abrir esta
+                }
+                infoWindowActual = infoWindow;
+                infoWindow.open(map, marker);
+            });
+
+        });
+    })
+    .catch(error => console.error("Error cargando ubicaciones:", error));
+
+
+function cargarUbicaciones() {
+    fetch("{{ url_for('routes.listar_ubicaciones') }}")
+        .then(response => response.json())
+        .then(data => {
+            let inicioSelect = document.getElementById("inicio");
+            let finSelect = document.getElementById("fin");
+            let paradasSelect = document.getElementById("paradas");
+        
+            data.forEach(ubicacion => {
+                let option = document.createElement("option");
+                option.value = ubicacion.id;
+                option.textContent = `${ubicacion.nombre} - ${ubicacion.direccion}`;
+            
+                inicioSelect.appendChild(option.cloneNode(true));
+                finSelect.appendChild(option.cloneNode(true));
+                paradasSelect.appendChild(option.cloneNode(true));
+            });
+        })
+        .catch(error => console.error("Error al cargar ubicaciones:", error));
+}
+
+    </script>
+</head>
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>
+
+<body onload="loadGoogleMapsAPI()">
+    <div class="navbar">
+        <a href="{{ url_for('routes.index') }}">Cargar Datos</a>
+        <a href="{{ url_for('routes.map') }}">Ver Mapa</a>
+        <a href="{{ url_for('routes.listado_ubicaciones') }}">Listado de Ubicaciones</a>
+        <a href="{{ url_for('routes.gestion_usuarios') }}">Gestión de Usuarios</a>
+        <a href="{{ url_for('routes.logout') }}" style="float: right;">Cerrar Sesión</a>
+    </div>
+    <div class="container">
+        <h1>Mapa de Ubicaciones y Rutas Guardadas</h1>
+        
+        <div class="map-container">
+            <div id="map" style="height:500px;width:100%;border:1px solid black;"></div>
+
+            <<select id="usuarioFiltro">
+                <option value="">Seleccionar Usuario</option>
+                {% for usuario in usuarios %}
+                    <option value="{{ usuario.id }}">{{ usuario.nombre }}</option>
+                {% endfor %}
+            </select>
+            
+            <button id="filtrarBtn">Filtrar</button>
+            <button id="desactivarFiltroBtn" style="display:none;">Desactivar Filtro</button>                   
+
+        </div>
+
+
+        <div class="controls">
+            <h2>Generar Ruta</h2>
+
+            <!-- Lista desplegable de ubicaciones -->
+            
+                <br><label for="inicio">Punto de inicio:</label><br>
+                <br><select id="inicio" class="select2" style="width: 100%;">
+                    <option value="">-- Seleccionar Punto de Inicio --</option>
+                </select><br>
+
+                <br><label for="fin">Punto de fin:</label><br>
+                <br><select id="fin" class="select2" style="width: 100%;">
+                    <option value="">-- Seleccionar Punto de Fin --</option>
+                </select><br>
+
+                <br><label for="paradas">Agregar parada:</label><br>
+                <br><select id="paradas" class="select2" style="width: 100%;">
+                    <option value="">-- Seleccionar Parada --</option>
+                </select><br>
+                <br><button onclick="agregarParada()">Agregar Parada</button><br>
+
+                <br><label for="usuarioAsignado">Asignar a usuario:</label><br>
+                <br><select id="usuarioAsignado">
+                    <option value="">-- Seleccionar Usuario --</option>
+                </select>
+
+            <h3>Paradas</h3>
+            <ul id="listaParadas"></ul>
+
+            <button onclick="calcularRuta()">Calcular Ruta</button>
+        </div>
+        
+        <div class="rutas-guardadas">
+            <h2>Rutas Guardadas</h2>
+            <div id="rutasGuardadas"></div> <!-- 🔹 Este ID debe coincidir con el de script.js -->
+        
+            <div id="detalles-ruta" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;">
+                <h3>Detalles de la Ruta</h3>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        let paradas = [];
+
+function agregarParada() {
+            let paradaSelect = document.getElementById("paradas");
+            let paradaId = paradaSelect.value;
+            let paradaTexto = paradaSelect.options[paradaSelect.selectedIndex].text;
+
+            if (paradaId !== "") {
+                paradas.push(paradaId);
+            
+                let lista = document.getElementById("listaParadas");
+                let li = document.createElement("li");
+                li.textContent = paradaTexto;  // 🔹 Muestra dirección en lugar de número
+                lista.appendChild(li);
+            }
+        }
+
+
+function calcularRuta() {
+    let inicioSelect = document.getElementById("inicio");
+    let finSelect = document.getElementById("fin");
+    let usuarioAsignadoSelect = document.getElementById("usuarioAsignado");
+
+    let inicio = inicioSelect.value;
+    let fin = finSelect.value;
+    let usuarioAsignado = usuarioAsignadoSelect.value;
+
+    let nombreUsuario = usuarioAsignadoSelect.options[usuarioAsignadoSelect.selectedIndex].text;
+    let fechaHoy = new Date().toISOString().split("T")[0]; // Formato YYYY-MM-DD
+
+    if (inicio === "" || fin === "" || usuarioAsignado === "") {
+        alert("Debes seleccionar inicio, fin y usuario asignado.");
+        return;
+    }
+
+    let ruta = {
+        nombre_ruta: `${fechaHoy} - ${nombreUsuario}`,
+        inicio: inicio,
+        fin: fin,
+        ubicaciones: paradas,
+        usuario_asignado: usuarioAsignado
+    };
+
+    fetch("/rutas/agregar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ruta)
+    })
+    .then(response => response.json())
+    .then(result => {
+        alert(result.mensaje);
+        location.reload();
+    })
+    .catch(error => console.error("Error al guardar la ruta:", error));
+}
+
+function mostrarRutasEnMapa() {
+    fetch("/rutas")
+        .then(response => response.json())
+        .then(data => {
+            let rutasContainer = document.getElementById("rutasGuardadas");
+            rutasContainer.innerHTML = ""; // Limpiar contenido previo
+
+            data.forEach(ruta => {
+                let rutaDiv = document.createElement("div");
+                rutaDiv.classList.add("ruta-item");
+
+                let rutaNombre = document.createElement("p");
+                rutaNombre.innerText = `Ruta: ${ruta.nombre_ruta} - ${ruta.asignado}`;
+
+                let btnMostrar = document.createElement("button");
+                btnMostrar.innerText = "Mostrar Ruta";
+                btnMostrar.onclick = () => trazarRutaEnMapa(ruta);
+
+                let btnEliminar = document.createElement("button");
+                btnEliminar.innerText = "Eliminar Ruta";
+                btnEliminar.id = `eliminarRutaBtn_${ruta.id}`;
+                btnEliminar.disabled = !ruta.todas_atendidas; // 🔹 Se deshabilita si hay ubicaciones pendientes
+                btnEliminar.onclick = () => eliminarRuta(ruta.id);
+
+                let btnCancelar = document.createElement("button");
+                btnCancelar.innerText = "Cancelar Ruta";
+                btnCancelar.onclick = () => cancelarRuta(ruta.id);
+
+                rutaDiv.appendChild(rutaNombre);
+                rutaDiv.appendChild(btnMostrar);
+                rutaDiv.appendChild(btnEliminar);
+                rutaDiv.appendChild(btnCancelar);
+
+                rutasContainer.appendChild(rutaDiv);
+            });
+        })
+        .catch(error => console.error("Error cargando rutas:", error));
+}
+
+function editarUsuarioAsignado(rutaId) {
+    let nuevoUsuarioId = document.getElementById("nuevoUsuario").value;
+
+    if (!nuevoUsuarioId) {
+        alert("Debes seleccionar un usuario.");
+        return;
+    }
+
+    fetch(`/rutas/editar_asignado/${rutaId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nuevo_usuario_id: nuevoUsuarioId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            mostrarRutasEnMapa(); // 🔹 Recargar rutas para actualizar el nombre del usuario
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => console.error("Error al editar usuario asignado:", error));
+}
+
+
+
+
+
+function mostrarDetallesRuta(ruta) {
+    let detallesContainer = document.getElementById("detalles-ruta");
+    detallesContainer.innerHTML = ""; 
+
+    let titulo = document.createElement("h3");
+    titulo.innerText = `Detalles de la Ruta: ${ruta.nombre_ruta}`;
+    detallesContainer.appendChild(titulo);
+
+    let lista = document.createElement("ul");
+    let todasAtendidas = true;
+
+    ruta.ubicaciones.forEach(ubicacion => {
+        let item = document.createElement("li");
+        item.innerHTML = `<br><b>SOT:</b> ${ubicacion.codsolot || "No disponible"} 
+                          <br><b>Dirección:</b> ${ubicacion.direccion || "No disponible"} 
+                          <br><b>CodCliente:</b> ${ubicacion.codcli || "No disponible"} 
+                          <br><b>Hora:</b> ${ubicacion.hora || "No disponible"} 
+                          <br><b>Teléfono:</b> ${ubicacion.telefono || "No disponible"}
+                          <br><b>Tipo Visita:</b> ${ubicacion.tipo_ubicacion || "No disponible"}`;
+
+        // 🔹 Si la ubicación no está atendida, añadir botón para marcarla como atendida
+        if (!ubicacion.atendida) {
+            let botonAtender = document.createElement("button");
+            botonAtender.innerText = "Marcar como Atendida";
+            botonAtender.onclick = function () {
+                marcarComoAtendido(ubicacion.id, 'efectiva');
+            };
+            item.appendChild(botonAtender);
+            todasAtendidas = false;  // 🔹 Si hay una sin atender, la ruta no se puede eliminar
+        } else {
+            item.innerHTML += `<br><b>Estado:</b>Atendida`;
+        }
+        
+        lista.appendChild(item);
+    });
+
+    detallesContainer.appendChild(lista);
+
+    actualizarEstadoEliminarRuta(ruta.id);
+
+    // 🔹 Habilitar o deshabilitar el botón de eliminar ruta según si todas están atendidas
+    let eliminarRutaBtn = document.getElementById(`eliminarRutaBtn_${ruta.id}`);
+    if (eliminarRutaBtn) {
+        eliminarRutaBtn.disabled = !todasAtendidas;
+    }
+
+    // Agregar botón para editar usuario asignado en detalles de la ruta
+    let usuarioLabel = document.createElement("label");
+    usuarioLabel.innerText = "Cambiar Usuario Asignado:";
+    detallesContainer.appendChild(usuarioLabel);
+
+    let selectUsuario = document.createElement("select");
+    selectUsuario.id = "nuevoUsuario";
+    detallesContainer.appendChild(selectUsuario);
+
+    // **🔹 Llenar el select con los usuarios disponibles**
+    fetch("/usuarios")
+        .then(response => response.json())
+        .then(usuarios => {
+            usuarios.forEach(usuario => {
+                let option = document.createElement("option");
+                option.value = usuario.id;
+                option.textContent = usuario.nombre;
+                if (usuario.id === ruta.asignado_id) {
+                    option.selected = true;  // **Pre-seleccionar el usuario actual**
+                }
+                selectUsuario.appendChild(option);
+            });
+        })
+        .catch(error => console.error("Error cargando usuarios:", error));
+
+    // **🔹 Agregar botón para cambiar usuario**
+    let botonEditar = document.createElement("button");
+    botonEditar.innerText = "Actualizar Usuario";
+    botonEditar.onclick = function () {
+        editarUsuarioAsignado(ruta.id);
+    };
+
+    detallesContainer.appendChild(botonEditar);
+}
+
+
+
+// Función para trazar la ruta en el mapa
+function trazarRutaEnMapa(ruta) {
+    console.log("Ruta recibida:", ruta); // Verifica que la ruta tenga los datos correctos
+
+    if (!ruta.ubicaciones || ruta.ubicaciones.length < 2) {
+        alert("Se necesitan al menos 2 ubicaciones para trazar la ruta.");
+        return;
+    }
+
+    // Verificar que todas las ubicaciones tengan coordenadas válidas
+    for (let ubicacion of ruta.ubicaciones) {
+        if (!ubicacion.latitud || !ubicacion.longitud) {
+            alert("Una o más ubicaciones no tienen coordenadas válidas.");
+            return;
+        }
+    }
+
+    // Limpiar cualquier ruta anterior
+    if (directionsRenderer) {
+        directionsRenderer.setMap(null);
+    }
+
+    directionsRenderer = new google.maps.DirectionsRenderer({ map: map });
+
+    let waypoints = ruta.ubicaciones.slice(1, -1).map(ubicacion => ({
+        location: new google.maps.LatLng(ubicacion.latitud, ubicacion.longitud),
+        stopover: true
+    }));
+
+    let request = {
+        origin: new google.maps.LatLng(ruta.ubicaciones[0].latitud, ruta.ubicaciones[0].longitud),
+        destination: new google.maps.LatLng(ruta.ubicaciones[ruta.ubicaciones.length - 1].latitud, ruta.ubicaciones[ruta.ubicaciones.length - 1].longitud),
+        waypoints: waypoints,
+        travelMode: google.maps.TravelMode.DRIVING
+    };
+
+    directionsService.route(request, function (response, status) {
+        if (status === google.maps.DirectionsStatus.OK) {
+            directionsRenderer.setDirections(response);
+        } else {
+            console.error("Error al trazar la ruta:", status);
+            alert("No se pudo calcular la ruta: " + status);
+        }
+    });
+
+    // Mostrar detalles de la ruta
+    mostrarDetallesRuta(ruta);
+}
+
+// Función para eliminar una ruta
+function eliminarRuta(rutaId) {
+    if (!confirm("¿Seguro que deseas eliminar esta ruta? Todas sus ubicaciones serán marcadas como revisadas.")) return;
+
+    fetch(`/rutas/eliminar/${rutaId}`, { method: "DELETE" })
+        .then(response => response.json())
+        .then(data => {
+            alert(data.mensaje);
+            mostrarRutasEnMapa();  // 🔹 Actualiza la lista de rutas
+            cargarListadoUbicaciones();  // 🔹 Refresca la lista de ubicaciones
+        })
+        .catch(error => console.error("Error eliminando ruta:", error));
+}
+
+function cancelarRuta(rutaId) {
+    if (!confirm("¿Seguro que deseas cancelar esta ruta? Esta acción eliminará la ruta pero no afectará las ubicaciones.")) return;
+
+    fetch(`/rutas/cancelar/${rutaId}`, { method: "DELETE" })
+        .then(response => response.json())
+        .then(result => {
+            alert(result.mensaje);
+            mostrarRutasEnMapa();  // Recargar lista de rutas
+            cargarListadoUbicaciones();
+        })
+        .catch(error => console.error("Error cancelando ruta:", error));
+}
+
+
+
+
+
+
+
+function cargarUsuarios() {
+    fetch("/usuarios")
+        .then(response => response.json())
+        .then(data => {
+            let usuarioSelect = document.getElementById("usuarioAsignado");
+
+            data.forEach(usuario => {
+                let option = document.createElement("option");
+                option.value = usuario.id;
+                option.textContent = usuario.nombre;
+                usuarioSelect.appendChild(option);
+            });
+        })
+        .catch(error => console.error("Error al cargar usuarios:", error));
+}
+
+
+// 🔹 Cargar Ubicaciones en la Tabla (activas y revisadas)
+function cargarListadoUbicaciones() {
+    fetch("/todas_ubicaciones")
+        .then(response => response.json())
+        .then(data => {
+            console.log("Ubicaciones recibidas:", data);  // 🔹 Verificar si llegan datos
+
+            let activas = document.getElementById("tablaActivas");
+            let revisadas = document.getElementById("tablaRevisadas");
+
+            if (!activas || !revisadas) {
+                console.error("No se encontraron los elementos de la tabla.");
+                return;
+            }
+
+            activas.innerHTML = "";
+            revisadas.innerHTML = "";
+
+            data.forEach(ubicacion => {
+                let fila = document.createElement("tr");
+                fila.innerHTML = `
+                    <td>${ubicacion.codsolot}</td>
+                    <td>${ubicacion.direccion || "No disponible"}</td>
+                    ${ubicacion.estado ? 
+                        `<td>${ubicacion.tipo_ubicacion}</td>  <!-- Mostramos "tipo_ubicacion" en vez de "estado" -->
+                         <td><button onclick="marcarUbicacionRevisada(${ubicacion.id})">Marcar como Revisado</button></td>`
+                    :
+                        `<td>${ubicacion.descripcion || "Sin comentario"}</td>  
+                         <td>
+                             <button onclick="restaurarUbicacionRevisada(${ubicacion.id})">Restaurar</button>
+                             <button onclick="eliminarUbicacionDefinitiva(${ubicacion.id})">Eliminar</button>
+                         </td>`}
+                `;
+
+                if (ubicacion.estado) {
+                    activas.appendChild(fila);
+                } else {
+                    revisadas.appendChild(fila);
+                }
+            });
+
+            console.log("Ubicaciones activas mostradas:", activas.innerHTML);
+            console.log("Ubicaciones revisadas mostradas:", revisadas.innerHTML);
+        })
+        .catch(error => console.error("Error cargando ubicaciones:", error));
+}
+
+// 🔹 Marcar Ubicación como Revisada desde el Mapa
+// 🔹 Marcar Ubicación como Revisada
+function marcarComoRevisado(ubicacionId) {
+    let comentario = prompt("Ingrese un comentario para la revisión:");
+
+    if (comentario === null || comentario.trim() === "") {
+        alert("Debe ingresar un comentario.");
+        return;
+    }
+
+    fetch(`/ubicaciones/revisar/${ubicacionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comentario: comentario })
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.mensaje);
+        cargarListadoUbicaciones();  // 🔹 Ahora actualiza la tabla
+        location.reload(); // 🔹 Y recarga el mapa
+    })
+    .catch(error => console.error("Error al marcar como revisado:", error));
+}
+
+
+
+function restaurarUbicacionRevisada(id) {
+    fetch(`/restaurar_ubicacion/${id}`, { method: "POST" })
+        .then(response => response.json())
+        .then(result => {
+            alert(result.mensaje);
+            cargarListadoUbicaciones();
+        })
+        .catch(error => console.error("Error al restaurar la ubicación:", error));
+}
+
+function eliminarUbicacionDefinitiva(id) {
+    if (!confirm("¿Seguro que deseas eliminar esta ubicación?")) return;
+
+    fetch(`/eliminar_ubicacion/${id}`, { method: "DELETE" })
+        .then(response => response.json())
+        .then(result => {
+            alert(result.mensaje);
+            cargarListadoUbicaciones();
+        })
+        .catch(error => console.error("Error al eliminar la ubicación:", error));
+}
+
+
+// 🔹 Buscador por CodSolot
+function buscarUbicacion() {
+    let filtro = document.getElementById("buscador").value.toLowerCase();
+    let filas = document.querySelectorAll("tbody tr");
+
+    filas.forEach(fila => {
+        let codsolot = fila.cells[0].textContent.toLowerCase();
+        fila.style.display = codsolot.includes(filtro) ? "" : "none";
+    });
+}
+
+// 🔹 Marcar Ubicación como Revisada
+function marcarUbicacionRevisada(id) {
+    let comentario = prompt("Ingrese una descripción para marcar como revisado:");
+    if (!comentario) {
+        alert("Debe ingresar una descripción.");
+        return;
+    }
+
+    fetch(`/ubicaciones/revisar/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comentario })
+    })
+    .then(response => response.json())
+    .then(result => {
+        alert(result.mensaje);
+        cargarUbicaciones();
+        cargarListadoUbicaciones();  // 🔹 Recargar la lista después de actualizar
+        location.reload();
+    })
+    .catch(error => console.error("Error al marcar como revisado:", error));
+}
+
+
+function marcarComoAtendido(ubicacionId, tipoAtencion) {
+    let comentario = prompt("Ingrese un comentario sobre la atención:");
+
+    if (!comentario || comentario.trim() === "") {
+        alert("Debe ingresar un comentario para validar la atención.");
+        return;
+    }
+
+    fetch(`/ubicaciones/atender/${ubicacionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo_atencion: tipoAtencion, comentario: comentario })
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.mensaje);
+        location.reload();
+        cargarUbicaciones();
+        mostrarRutasEnMapa();
+        cargarListadoUbicaciones();
+        actualizarEstadoEliminarRuta(rutaId);
+
+        mostrarDetallesRutaPorId(rutaId); // 🔹 Recargar detalles de la ruta después de marcar la ubicación como atendida
+        
+    })
+    .catch(error => console.error("Error al marcar como atendido:", error));
+}
+
+
+function actualizarEstadoEliminarRuta(rutaId) {
+    fetch("/rutas")
+        .then(response => response.json())
+        .then(rutas => {
+            let ruta = rutas.find(r => r.id === rutaId);
+            if (ruta) {
+                let eliminarBtn = document.getElementById(`eliminarRutaBtn_${rutaId}`);
+                if (eliminarBtn) {
+                    eliminarBtn.disabled = !ruta.todas_atendidas;  // 🔹 Habilita si todas están atendidas
+                }
+            }
+        })
+        .catch(error => console.error("Error verificando estado de eliminación de ruta:", error));
+}
+
+function cargarUbicacionesAtendidas() {
+    fetch("/ubicaciones_atendidas")
+        .then(response => response.json())
+        .then(data => {
+            let atendidas = document.getElementById("tablaAtendidas");
+            atendidas.innerHTML = "";
+
+            data.forEach(ubicacion => {
+                let fila = document.createElement("tr");
+                fila.innerHTML = `
+                    <td>${ubicacion.codsolot}</td>
+                    <td>${ubicacion.direccion || "No disponible"}</td>
+                    <td>${ubicacion.atendido_por}</td>
+                    <td>${ubicacion.fecha_hora_atencion}</td>
+                    <td>${ubicacion.tipo_atencion}</td>
+                    <td>${ubicacion.comentario || "Sin comentario"}</td>
+                    <td>
+                        <button onclick="restaurarUbicacion(${ubicacion.id})">Restaurar</button>
+                    </td>
+                `;
+                atendidas.appendChild(fila);
+            });
+        })
+        .catch(error => console.error("Error cargando ubicaciones atendidas:", error));
+}
+
+
+
+
+
+
+function filtrarUbicaciones() {
+    let userId = document.getElementById("usuarioFiltro").value;
+    console.log("Usuario seleccionado:", userId);
+
+    if (!userId) {
+        alert("Por favor, selecciona un usuario.");
+        return;
+    }
+
+    // 🔹 Eliminar todos los marcadores actuales antes de filtrar
+    desactivarFiltro();
+
+    fetch(`/ubicaciones_filtradas?usuario_id=${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            actualizarMapa(data);
+            document.getElementById("desactivarFiltroBtn").style.display = "inline-block"; // 🔹 Mostrar botón para desactivar filtro
+            document.getElementById("filtrarBtn").disabled = true; // 🔹 Deshabilitar botón de filtrar
+        })
+        .catch(error => console.error("Error al obtener ubicaciones:", error));
+}
+
+
+
+
+function actualizarMapa(ubicaciones) {
+    console.log("Actualizando mapa con ubicaciones:", ubicaciones);
+
+    // 🔹 Si hay marcadores anteriores, los eliminamos primero
+    desactivarFiltro();
+
+    // 🔹 Agregamos los nuevos marcadores filtrados
+    ubicaciones.forEach(ubicacion => {
+        let marker = new google.maps.Marker({
+            position: { lat: parseFloat(ubicacion.latitud), lng: parseFloat(ubicacion.longitud) },
+            map: map,
+            title: ubicacion.nombre
+        });
+
+        let infoWindow = new google.maps.InfoWindow({
+            content: `
+            <b>SOT:</b> ${ubicacion.codsolot ? ubicacion.codsolot : "No disponible"}<br>
+            <b>Dirección:</b> ${ubicacion.direccion ? ubicacion.direccion : "No disponible"}<br>
+            <b>Tipo Visita:</b> ${ubicacion.tipo_ubicacion ? ubicacion.tipo_ubicacion : "No disponible"}<br>
+            
+            <button onclick="marcarComoAtendido(${ubicacion.id}, 'efectiva')">Atendido Efectivo</button>
+            <button onclick="marcarComoAtendido(${ubicacion.id}, 'no efectiva')">Atendido No Efectivo</button>
+        `
+        });
+
+        // Asegurar que solo se abra un infoWindow a la vez
+        marker.addListener("click", function () {
+            if (window.infoWindowAbierto) {
+                window.infoWindowAbierto.close();
+            }
+            window.infoWindowAbierto = infoWindow;
+            infoWindow.open(map, marker);
+        });
+
+        window.markers.push(marker);
+    });
+}
+
+
+
+function desactivarFiltro() {
+    console.log("Desactivando filtro, eliminando todas las ubicaciones...");
+
+    // 🔹 Eliminar todos los marcadores actuales del mapa
+    if (window.markers) {
+        window.markers.forEach(marker => marker.setMap(null));
+    }
+    window.markers = []; // 🔹 Vaciar el array de marcadores
+
+    // 🔹 Ocultar el botón de desactivar filtro
+    document.getElementById("desactivarFiltroBtn").style.display = "none";
+
+    // 🔹 Habilitar el botón de filtrar nuevamente
+    document.getElementById("filtrarBtn").disabled = false;
+}
+
+
+
+
+
+
+function inicializarSelectsBusqueda() {
+    // Aplica Select2 para búsqueda en los selects sin afectar su funcionalidad previa
+    ["#inicio", "#fin", "#paradas"].forEach(id => {
+        $(id).select2({
+            placeholder: "Escribe para buscar...",
+            allowClear: true
+        });
+    });
+}
+
+
+
+
+
+
+
+
+document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("filtrarBtn").addEventListener("click", filtrarUbicaciones);
+    document.getElementById("desactivarFiltroBtn").addEventListener("click", desactivarFiltro);
+});
+
+
+
+
+window.onload = function () {
+    loadGoogleMapsAPI();
+    cargarListadoUbicaciones();
+    setTimeout(() => { // 🔹 Esperar que la API de Google Maps esté lista
+        cargarUsuarios();
+        mostrarRutasEnMapa();
+        inicializarSelectsBusqueda();
+    }, 1000);
+};
+    </script>
+</body>
+</html>

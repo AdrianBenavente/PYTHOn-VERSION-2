@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Listado de Ubicaciones</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body onload="cargarListadoUbicaciones()">
+    <div class="navbar">
+        <a href="{{ url_for('routes.index') }}">Cargar Datos</a>
+        <a href="{{ url_for('routes.map') }}">Ver Mapa</a>
+        <a href="{{ url_for('routes.listado_ubicaciones') }}">Listado de Ubicaciones</a>
+        <a href="{{ url_for('routes.gestion_usuarios') }}">Gestión de Usuarios</a>
+        <a href="{{ url_for('routes.logout') }}" style="float: right;">Cerrar Sesión</a>
+    </div>
+
+    <h1>📌 Listado de Ubicaciones</h1>
+
+    <input type="text" id="buscador" placeholder="🔍 Buscar por CodSolot" onkeyup="buscarUbicacion()">
+
+    <h2>📍 Ubicaciones Activas</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>SOT</th>
+                    <th>Dirección</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tablaActivas"></tbody>
+        </table>
+    </div>
+
+    <h2>✅ Ubicaciones Atendidas</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>SOT</th>
+                    <th>Dirección</th>
+                    <th>Atendido</th>
+                    <th>Fecha y Hora</th>
+                    <th>Tipo de Atención</th>
+                    <th>Comentario</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tablaAtendidas"></tbody>
+        </table>
+    </div>
+    <button onclick="descargarExcel()">📥 Exportar a Excel</button>
+
+    <script src="{{ url_for('static', filename='script.js') }}">
+        
+    </script>
+</body>
+</html>

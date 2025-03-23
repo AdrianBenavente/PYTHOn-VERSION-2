@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Rutas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script>
+        function loadGoogleMapsAPI() {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+
+        function initMap() {
+            var map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 12,
+                center: { lat: -12.0464, lng: -77.0428 }
+            });
+
+            fetch("{{ url_for('routes.listar_rutas') }}")
+                .then(response => response.json())
+                .then(rutas => {
+                    rutas.forEach(ruta => {
+                        var pathCoordinates = ruta.ubicaciones.map(ubicacion => ({
+                            lat: ubicacion.latitud,
+                            lng: ubicacion.longitud
+                        }));
+
+                        var rutaPath = new google.maps.Polyline({
+                            path: pathCoordinates,
+                            geodesic: true,
+                            strokeColor: "#FF0000",
+                            strokeOpacity: 1.0,
+                            strokeWeight: 3,
+                            map: map
+                        });
+
+                        var infoWindow = new google.maps.InfoWindow({
+                            content: `<strong>${ruta.nombre_ruta}</strong><br>Asignado a: ${ruta.usuario}`
+                        });
+
+                        rutaPath.addListener("click", function () {
+                            infoWindow.setPosition(pathCoordinates[0]);
+                            infoWindow.open(map);
+                        });
+                    });
+                })
+                .catch(error => console.error("Error cargando rutas:", error));
+        }
+    </script>
+</head>
+<body onload="loadGoogleMapsAPI()">
+    <div class="container">
+        <h1>Mapa de Ubicaciones y Rutas Guardadas</h1>
+        
+        <div class="map-container">
+            <div id="map" style="height:500px;width:100%;border:1px solid black;"></div>
+        </div>
+
+        <div class="controls">
+            <h2>Generar Ruta</h2>
+            <label for="inicio">Punto de inicio:</label>
+            <input type="text" id="inicio" placeholder="Ingresa el punto de inicio">
+            
+            <label for="fin">Punto de fin:</label>
+            <input type="text" id="fin" placeholder="Ingresa el punto de fin">
+            
+            <label for="paradas">Agregar parada:</label>
+            <input type="text" id="paradas" placeholder="Ingresa una parada">
+            <button onclick="agregarParada()">Agregar Parada</button>
+
+            <h3>Paradas</h3>
+            <ul id="listaParadas"></ul>
+
+            <button onclick="calcularRuta()">Calcular Ruta</button>
+        </div>
+        
+        <div class="rutas-guardadas">
+            <h2>Rutas Guardadas</h2>
+            <ul id="listaRutas">
+                <!-- Se llenará dinámicamente con rutas desde la base de datos -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let paradas = [];
+
+        function agregarParada() {
+            let paradaInput = document.getElementById("paradas");
+            let parada = paradaInput.value.trim();
+            if (parada !== "") {
+                paradas.push(parada);
+                let lista = document.getElementById("listaParadas");
+                let li = document.createElement("li");
+                li.textContent = parada;
+                lista.appendChild(li);
+                paradaInput.value = "";
+            }
+        }
+
+        function calcularRuta() {
+            let inicio = document.getElementById("inicio").value.trim();
+            let fin = document.getElementById("fin").value.trim();
+
+            if (inicio === "" || fin === "") {
+                alert("Debes ingresar un punto de inicio y un punto de fin.");
+                return;
+            }
+
+            let ruta = {
+                inicio: inicio,
+                fin: fin,
+                paradas: paradas
+            };
+
+            fetch("{{ url_for('routes.agregar_ruta') }}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    nombre_ruta: `Ruta desde ${inicio} hasta ${fin}`,
+                    ubicaciones: paradas
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                alert("Ruta guardada correctamente.");
+                location.reload();
+            })
+            .catch(error => console.error("Error al guardar la ruta:", error));
+        }
+
+        // Cargar rutas guardadas
+        fetch("{{ url_for('routes.listar_rutas') }}")
+            .then(response => response.json())
+            .then(rutas => {
+                let listaRutas = document.getElementById("listaRutas");
+                rutas.forEach(ruta => {
+                    let li = document.createElement("li");
+                    li.innerHTML = `<strong>${ruta.nombre_ruta}</strong> - <button onclick="eliminarRuta(${ruta.id})">Eliminar</button>`;
+                    listaRutas.appendChild(li);
+                });
+            });
+
+        function eliminarRuta(id) {
+            fetch(`{{ url_for('routes.eliminar_ruta', id=0) }}`.replace("0", id), {
+                method: "DELETE"
+            })
+            .then(response => response.json())
+            .then(result => {
+                alert("Ruta eliminada correctamente.");
+                location.reload();
+            })
+            .catch(error => console.error("Error al eliminar la ruta:", error));
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body Onload="cargarUsuarios()">
+    <div class="navbar">
+        <a href="{{ url_for('routes.index') }}">Cargar Datos</a>
+        <a href="{{ url_for('routes.map') }}">Ver Mapa</a>
+        <a href="{{ url_for('routes.listado_ubicaciones') }}">Listado de Ubicaciones</a>
+        <a href="{{ url_for('routes.gestion_usuarios') }}">Gestión de Usuarios</a>
+        <a href="{{ url_for('routes.logout') }}" style="float: right;">Cerrar Sesión</a>
+    </div>
+
+    <h1>Gestión de Usuarios</h1>
+
+    <div class="form-container">
+        <h2>Agregar Usuario</h2>
+        <div class="form-group">
+            <input type="text" id="nombre" placeholder="Nombre">
+            <input type="text" id="usuario" placeholder="Usuario">
+        </div>
+        <div class="form-group">
+            <input type="placa" id="placa" placeholder="Placa">
+            <input type="text" id="telefono" placeholder="Teléfono">
+        </div>
+        <div class="form-group">
+            <input type="password" id="contraseña" placeholder="Contraseña">
+            <select id="rol">
+                <option value="1">Administrador</option>
+                <option value="2">Usuario</option>
+            </select>
+        </div>
+        <button onclick="guardarUsuario()">Guardar</button>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Usuario</th>
+                    <th>Placa</th>
+                    <th>Teléfono</th>
+                    <th>Rol</th>
+                    <th>Activo</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tablaUsuarios"></tbody>
+        </table>
+    </div>
+    
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
