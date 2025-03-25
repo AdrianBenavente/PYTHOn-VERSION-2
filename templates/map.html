@@ -136,7 +136,7 @@ function cargarUbicaciones() {
         <div class="map-container">
             <div id="map" style="height:500px;width:100%;border:1px solid black;"></div>
 
-            <<select id="usuarioFiltro">
+            <select id="usuarioFiltro">
                 <option value="">Seleccionar Usuario</option>
                 {% for usuario in usuarios %}
                     <option value="{{ usuario.id }}">{{ usuario.nombre }}</option>
